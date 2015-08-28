@@ -20,6 +20,9 @@ jimport('joomla.database.table.user');
 require_once JPATH_SITE . '/libraries/joomla/filesystem/folder.php';
 require_once JPATH_ROOT . '/administrator/components/com_users/models/users.php';
 
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 /**
  * User Api.
  *
@@ -129,6 +132,9 @@ class UsersApiResourceUsers extends ApiResource
 		if ($id = $input->get('id'))
 		{
 			$user = JUser::getInstance($id);
+ 
+			// Fill user data with profile
+			$user = self::getProfileData($user);
 
 			if (!$user->id)
 			{
@@ -146,10 +152,54 @@ class UsersApiResourceUsers extends ApiResource
 
 			foreach ($users as $k => $v)
 			{
+				// Fill user data with profile
+				$users[$k] = self::getProfileData($users[$k]);
+				
 				unset($users[$k]->password);
 			}
 
 			$this->plugin->setResponse($users);
 		}
+	}
+	
+	/**
+	 * Function get for users record with profile data.
+	 *
+	 * @return void
+	 */
+	private function getProfileData($user)
+	{
+		// Load the profile data from the database.
+			$db = JFactory::getDbo();
+			$db->setQuery('SELECT profile_key, profile_value FROM #__user_profiles' .
+						' WHERE user_id = ' . (int) $user->id . " AND profile_key LIKE 'profile.%'" .
+						' ORDER BY ordering');
+
+				try
+				{
+					$results = $db->loadRowList();
+				}
+				catch (RuntimeException $e)
+				{
+					$this->_subject->setError($e->getMessage());
+
+					return false;
+				}
+
+				// Merge the profile data.
+				$user->profile = array();
+
+				foreach ($results as $v)
+				{
+					$k = str_replace('profile.', '', $v[0]);
+					$user->profile[$k] = json_decode($v[1], true);
+
+					if ($user->profile[$k] === null)
+					{
+						$user->profile[$k] = $v[1];
+					}
+				}
+				
+	return $user;
 	}
 }
